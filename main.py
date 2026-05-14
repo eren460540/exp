@@ -34,7 +34,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 MAX_FILE_SIZE = 500_000
-MAX_CONTEXT_LINES = 7500
+MAX_CONTEXT_LINES = 5500
 
 
 # =========================================================
@@ -211,36 +211,6 @@ Rules:
 """
 
 CASH = "<:cash:1499803753396703252>"
-
-EMBED_COLOR = 0x7B14BB
-
-EMBED_IMAGE = (
-    "https://cdn.discordapp.com/attachments/"
-    "1432016228049752135/"
-    "1502927683560931408/"
-    "file_00000000d3807246aa64c785bc8dd663.png"
-)
-
-_original_embed_init = discord.Embed.__init__
-
-
-def _patched_embed_init(self, *args, **kwargs):
-
-    kwargs["color"] = EMBED_COLOR
-
-    _original_embed_init(
-        self,
-        *args,
-        **kwargs
-    )
-
-    self.set_image(
-        url=EMBED_IMAGE
-    )
-
-
-discord.Embed.__init__ = _patched_embed_init
-
 
 # =========================================================
 # USER LOCKS
@@ -722,8 +692,8 @@ class ScriptBot(commands.Bot):
                 except:
                     pass
 
-    
-    bot = ScriptBot()
+
+bot = ScriptBot()
 
 # =========================================================
 # GLOBAL ERROR HANDLER
@@ -1331,7 +1301,7 @@ FULL ORIGINAL FILE:
                     "content": prompt
                 }
             ],
-            max_tokens=50000
+            max_tokens=7000
         )
 
         edited_content = clean_code(
