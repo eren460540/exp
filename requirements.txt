@@ -1,0 +1,8 @@
+discord.py==2.3.2
+cerebras-cloud-sdk
+asyncpg
+httpx>=0.27.0
+python-dotenv
+audioop-lts
+rapidfuzz
+PyNaCl
