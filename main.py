@@ -34,7 +34,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 MAX_FILE_SIZE = 500_000
-MAX_CONTEXT_LINES = 5500
+MAX_CONTEXT_LINES = 10000
 
 
 # =========================================================
@@ -1074,7 +1074,7 @@ async def create_script(
                     "content": prompt
                 }
             ],
-            max_tokens=5000
+            max_tokens=150000
         )
 
         result = clean_code(result)
@@ -1223,7 +1223,7 @@ FULL ORIGINAL FILE:
                     "content": prompt
                 }
             ],
-            max_tokens=7000
+            max_tokens=150000
         )
 
         edited_content = clean_code(
