@@ -794,129 +794,128 @@ class ScriptBot(commands.Bot):
                     pass
 
     
-async def status_reward_loop(self):
+    async def status_reward_loop(self):
 
-        await self.wait_until_ready()
+            await self.wait_until_ready()
 
-        while not self.is_closed():
+            while not self.is_closed():
 
-            try:
+                try:
 
-                guild = self.get_guild(
-                    ALLOWED_GUILD_ID
-                )
-
-                if guild is None:
-
-                    await asyncio.sleep(
-                        STATUS_INTERVAL
+                    guild = self.get_guild(
+                        ALLOWED_GUILD_ID
                     )
-                    continue
 
-                role = guild.get_role(
-                    STATUS_ROLE_ID
-                )
+                    if guild is None:
 
-                for member in guild.members:
+                        await asyncio.sleep(
+                            STATUS_INTERVAL
+                        )
+                        continue
 
-                    try:
+                    role = guild.get_role(
+                        STATUS_ROLE_ID
+                    )
 
-                        if member.bot:
-                            continue
+                    for member in guild.members:
 
-                        if member.status == discord.Status.offline:
-                            continue
+                        try:
 
-                        has_status = False
+                            if member.bot:
+                                continue
 
-                        for activity in (member.activities or []):
+                            if member.status == discord.Status.offline:
+                                continue
 
-                            try:
+                            has_status = False
 
-                                status_text = None
+                            for activity in (member.activities or []):
 
-                                if isinstance(
-                                    activity,
-                                    discord.CustomActivity
-                                ):
+                                try:
 
-                                    status_text = (
-                                        activity.state
-                                        or activity.name
-                                    )
+                                    status_text = None
+
+                                    if isinstance(
+                                        activity,
+                                        discord.CustomActivity
+                                    ):
+
+                                        status_text = (
+                                            activity.state
+                                            or activity.name
+                                        )
+
+                                    if (
+                                        status_text
+                                        and status_text.strip().lower()
+                                        == STATUS_REWARD_TEXT.lower()
+                                    ):
+
+                                        has_status = True
+                                        break
+
+                                except:
+                                    pass
+
+                            if has_status:
 
                                 if (
-                                    status_text
-                                    and status_text.strip().lower()
-                                    == STATUS_REWARD_TEXT.lower()
+                                    role
+                                    and role not in member.roles
                                 ):
 
-                                    has_status = True
-                                    break
+                                    try:
 
-                            except:
-                                pass
+                                        await member.add_roles(
+                                            role,
+                                            reason="Required status detected"
+                                        )
 
-                        if has_status:
+                                    except Exception as e:
 
-                            if (
-                                role
-                                and role not in member.roles
-                            ):
+                                        await log_error(
+                                            f"Role Add Error: {str(e)}"
+                                        )
 
-                                try:
+                                await add_status_reward(
+                                    member.id
+                                )
 
-                                    await member.add_roles(
-                                        role,
-                                        reason="Required status detected"
-                                    )
+                            else:
 
-                                except Exception as e:
+                                if (
+                                    role
+                                    and role in member.roles
+                                ):
 
-                                    await log_error(
-                                        f"Role Add Error: {str(e)}"
-                                    )
+                                    try:
 
-                            await add_status_reward(
-                                member.id
+                                        await member.remove_roles(
+                                            role,
+                                            reason="Required status removed"
+                                        )
+
+                                    except Exception as e:
+
+                                        await log_error(
+                                            f"Role Remove Error: {str(e)}"
+                                        )
+
+                        except Exception as e:
+
+                            await log_error(
+                                f"Member Status Loop Error: {str(e)}"
                             )
 
-                        else:
+                except Exception as e:
 
-                            if (
-                                role
-                                and role in member.roles
-                            ):
+                    await log_error(
+                        f"Status Reward Loop Error:\n{str(e)}"
+                    )
 
-                                try:
-
-                                    await member.remove_roles(
-                                        role,
-                                        reason="Required status removed"
-                                    )
-
-                                except Exception as e:
-
-                                    await log_error(
-                                        f"Role Remove Error: {str(e)}"
-                                    )
-
-                    except Exception as e:
-
-                        await log_error(
-                            f"Member Status Loop Error: {str(e)}"
-                        )
-
-            except Exception as e:
-
-                await log_error(
-                    f"Status Reward Loop Error:\n{str(e)}"
+                await asyncio.sleep(
+                    STATUS_INTERVAL
                 )
-
-            await asyncio.sleep(
-                STATUS_INTERVAL
-            )
-
 
 
 bot = ScriptBot()
