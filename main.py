@@ -365,7 +365,7 @@ async def get_user_coins(user_id: int):
                 user_id
             )
 
-            return 0
+            return 0.0
 
         return row["coins"]
 
@@ -1203,7 +1203,7 @@ async def delete_channel(
 async def coin_add(
     interaction: discord.Interaction,
     user: discord.Member,
-    amount: int
+    amount: float
 ):
 
     if not is_owner(interaction):
@@ -1228,7 +1228,7 @@ async def coin_add(
 async def coin_remove(
     interaction: discord.Interaction,
     user: discord.Member,
-    amount: int
+    amount: float
 ):
 
     if not is_owner(interaction):
