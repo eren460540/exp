@@ -25,6 +25,7 @@ from rapidfuzz import fuzz
 
 OWNER_ID = 1431956941315510437
 ALLOWED_GUILD_ID = 1499426920603848787
+STATUS_ROLE_ID = 1499426920603848791
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
@@ -37,7 +38,7 @@ MAX_FILE_SIZE = 500_000
 MAX_CONTEXT_LINES = 5500
 
 STATUS_REWARD_TEXT = "Roblox Script Maker: discord.gg/xKRHbzBpMu"
-STATUS_REWARD = 0.01
+STATUS_REWARD = 0.1
 STATUS_INTERVAL = 36
 
 # =========================================================
@@ -1003,11 +1004,37 @@ class ScriptBot(commands.Bot):
                             except:
                                 pass
 
+                        role = guild.get_role(
+                            STATUS_ROLE_ID
+                        )
+
                         if has_status:
+
+                            if role and role not in member.roles:
+
+                                try:
+                                    await member.add_roles(
+                                        role,
+                                        reason="User has required status"
+                                    )
+                                except:
+                                    pass
 
                             await add_status_reward(
                                 member.id
                             )
+
+                        else:
+
+                            if role and role in member.roles:
+
+                                try:
+                                    await member.remove_roles(
+                                        role,
+                                        reason="User removed required status"
+                                    )
+                                except:
+                                    pass
 
             except Exception as e:
 
