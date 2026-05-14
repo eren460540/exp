@@ -25,7 +25,6 @@ from rapidfuzz import fuzz
 
 OWNER_ID = 1431956941315510437
 ALLOWED_GUILD_ID = 1499426920603848787
-STATUS_ROLE_ID = 1499426920603848791
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
@@ -37,9 +36,6 @@ WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 MAX_FILE_SIZE = 500_000
 MAX_CONTEXT_LINES = 5500
 
-STATUS_REWARD_TEXT = "Roblox Script Maker: discord.gg/xKRHbzBpMu"
-STATUS_REWARD = 0.01
-STATUS_INTERVAL = 36
 
 # =========================================================
 # SECURITY
@@ -159,53 +155,20 @@ async def init_db():
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY,
-                coins DOUBLE PRECISION NOT NULL DEFAULT 0
+                coins BIGINT NOT NULL DEFAULT 0
             )
         """)
 
+        
+
+
+
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS status_rewards (
+            CREATE TABLE IF NOT EXISTS daily_rewards (
                 user_id BIGINT PRIMARY KEY,
-                hour_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
-                day_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
-                week_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
-                total_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
-                last_hour_reset TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                last_day_reset TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                last_week_reset TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                last_claim TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                last_claim TIMESTAMPTZ
             )
         """)
-
-        await conn.execute("""
-            ALTER TABLE status_rewards
-            ADD COLUMN IF NOT EXISTS last_claim TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        """)
-
-        await conn.execute("""
-            ALTER TABLE status_rewards
-            ALTER COLUMN last_hour_reset TYPE TIMESTAMPTZ
-            USING last_hour_reset AT TIME ZONE 'UTC'
-        """)
-
-        await conn.execute("""
-            ALTER TABLE status_rewards
-            ALTER COLUMN last_day_reset TYPE TIMESTAMPTZ
-            USING last_day_reset AT TIME ZONE 'UTC'
-        """)
-
-        await conn.execute("""
-            ALTER TABLE status_rewards
-            ALTER COLUMN last_week_reset TYPE TIMESTAMPTZ
-            USING last_week_reset AT TIME ZONE 'UTC'
-        """)
-
-        await conn.execute("""
-            ALTER TABLE status_rewards
-            ALTER COLUMN last_claim TYPE TIMESTAMPTZ
-            USING last_claim AT TIME ZONE 'UTC'
-        """)
-
 
 # =========================================================
 # CLIENTS
@@ -279,7 +242,7 @@ async def log_error(message: str):
     try:
 
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0)
+            timeout=httpx.Timeout(30)
         ) as client:
 
             await client.post(
@@ -365,14 +328,14 @@ async def get_user_coins(user_id: int):
                 user_id
             )
 
-            return 0.0
+            return 0
 
         return row["coins"]
 
 
 async def update_user_coins(
     user_id: int,
-    amount: float
+    amount: int
 ):
 
     async with db_pool.acquire() as conn:
@@ -415,68 +378,6 @@ async def update_user_coins(
         )
 
         return new_total
-
-
-async def add_status_reward(user_id: int):
-
-    async with db_pool.acquire() as conn:
-
-        row = await conn.fetchrow(
-            """
-            SELECT *
-            FROM status_rewards
-            WHERE user_id = $1
-            """,
-            user_id
-        )
-
-        now = datetime.now(timezone.utc)
-
-        def ensure_utc(dt):
-
-            if dt is None:
-                return now
-
-            if dt.tzinfo is None:
-                return dt.replace(tzinfo=timezone.utc)
-
-            return dt.astimezone(timezone.utc)
-
-        if not row:
-
-            await conn.execute(
-                """
-                INSERT INTO status_rewards (
-                    user_id,
-                    hour_coins,
-                    day_coins,
-                    week_coins,
-                    total_coins,
-                    last_hour_reset,
-                    last_day_reset,
-                    last_week_reset,
-                    last_claim
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                """,
-                user_id,
-                STATUS_REWARD,
-                STATUS_REWARD,
-                STATUS_REWARD,
-                STATUS_REWARD,
-                now,
-                now,
-                now,
-                now
-            )
-
-            await update_user_coins(
-                user_id,
-                STATUS_REWARD
-            )
-
-
-
 
 
 async def get_status_data(user_id: int):
@@ -666,7 +567,7 @@ async def get_ai_completion(
             if model_id.startswith("openai/"):
 
                 async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(60.0)
+                    timeout=httpx.Timeout(60)
                 ) as client:
 
                     res = await client.post(
@@ -779,9 +680,7 @@ class ScriptBot(commands.Bot):
 
         await init_db()
 
-        self.loop.create_task(
-            self.status_reward_loop()
-        )
+        
 
         for guild in self.guilds:
 
@@ -794,131 +693,7 @@ class ScriptBot(commands.Bot):
                     pass
 
     
-    async def status_reward_loop(self):
-
-            await self.wait_until_ready()
-
-            while not self.is_closed():
-
-                try:
-
-                    guild = self.get_guild(
-                        ALLOWED_GUILD_ID
-                    )
-
-                    if guild is None:
-
-                        await asyncio.sleep(
-                            STATUS_INTERVAL
-                        )
-                        continue
-
-                    role = guild.get_role(
-                        STATUS_ROLE_ID
-                    )
-
-                    for member in guild.members:
-
-                        try:
-
-                            if member.bot:
-                                continue
-
-                            if member.status == discord.Status.offline:
-                                continue
-
-                            has_status = False
-
-                            for activity in (member.activities or []):
-
-                                try:
-
-                                    status_text = None
-
-                                    if isinstance(
-                                        activity,
-                                        discord.CustomActivity
-                                    ):
-
-                                        status_text = (
-                                            activity.state
-                                            or activity.name
-                                        )
-
-                                    if (
-                                        status_text
-                                        and status_text.strip().lower()
-                                        == STATUS_REWARD_TEXT.lower()
-                                    ):
-
-                                        has_status = True
-                                        break
-
-                                except:
-                                    pass
-
-                            if has_status:
-
-                                if (
-                                    role
-                                    and role not in member.roles
-                                ):
-
-                                    try:
-
-                                        await member.add_roles(
-                                            role,
-                                            reason="Required status detected"
-                                        )
-
-                                    except Exception as e:
-
-                                        await log_error(
-                                            f"Role Add Error: {str(e)}"
-                                        )
-
-                                await add_status_reward(
-                                    member.id
-                                )
-
-                            else:
-
-                                if (
-                                    role
-                                    and role in member.roles
-                                ):
-
-                                    try:
-
-                                        await member.remove_roles(
-                                            role,
-                                            reason="Required status removed"
-                                        )
-
-                                    except Exception as e:
-
-                                        await log_error(
-                                            f"Role Remove Error: {str(e)}"
-                                        )
-
-                        except Exception as e:
-
-                            await log_error(
-                                f"Member Status Loop Error: {str(e)}"
-                            )
-
-                except Exception as e:
-
-                    await log_error(
-                        f"Status Reward Loop Error:\n{str(e)}"
-                    )
-
-                await asyncio.sleep(
-                    STATUS_INTERVAL
-                )
-
-
-bot = ScriptBot()
+    bot = ScriptBot()
 
 # =========================================================
 # GLOBAL ERROR HANDLER
@@ -1238,7 +1013,7 @@ async def delete_channel(
 async def coin_add(
     interaction: discord.Interaction,
     user: discord.Member,
-    amount: float
+    amount: int
 ):
 
     if not is_owner(interaction):
@@ -1263,7 +1038,7 @@ async def coin_add(
 async def coin_remove(
     interaction: discord.Interaction,
     user: discord.Member,
-    amount: float
+    amount: int
 ):
 
     if not is_owner(interaction):
@@ -1289,7 +1064,7 @@ async def coin_remove(
 
 
 @bot.tree.command(name="balance")
-@app_commands.checks.cooldown(1, 3.0)
+@app_commands.checks.cooldown(1, 3)
 async def balance(
     interaction: discord.Interaction
 ):
@@ -1305,7 +1080,7 @@ async def balance(
 
 
 @bot.tree.command(name="status")
-@app_commands.checks.cooldown(1, 3.0)
+@app_commands.checks.cooldown(1, 3)
 async def status(interaction: discord.Interaction):
 
     data = await get_status_data(interaction.user.id)
@@ -1317,10 +1092,10 @@ async def status(interaction: discord.Interaction):
 
     embed.description = (
         "## Free Coins from Status\n"
-        f"> This hour: **{data['hour']:.2f}** {CASH}\n"
-        f"> Today: **{data['day']:.2f}** {CASH}\n"
-        f"> This week: **{data['week']:.2f}** {CASH}\n"
-        f"> Total: **{data['total']:.2f}** {CASH}\n\n"
+        f"> This hour: **{data['hour']:.0f}** {CASH}\n"
+        f"> Today: **{data['day']:.0f}** {CASH}\n"
+        f"> This week: **{data['week']:.0f}** {CASH}\n"
+        f"> Total: **{data['total']:.0f}** {CASH}\n\n"
         f"> Required status: `{STATUS_REWARD_TEXT}`"
     )
 
@@ -1332,7 +1107,7 @@ async def status(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="create_script")
-@app_commands.checks.cooldown(1, 15.0)
+@app_commands.checks.cooldown(1, 15)
 async def create_script(
     interaction: discord.Interaction,
     prompt: str
@@ -1423,7 +1198,7 @@ async def create_script(
 
 
 @bot.tree.command(name="edit_script")
-@app_commands.checks.cooldown(1, 10.0)
+@app_commands.checks.cooldown(1, 10)
 async def edit_script(
     interaction: discord.Interaction,
     file: discord.Attachment,
@@ -1572,5 +1347,121 @@ async def on_error(event, *args, **kwargs):
 # =========================================================
 # RUN
 # =========================================================
+
+
+
+@bot.tree.command(
+    name="daily",
+    description="Claim your daily reward"
+)
+async def daily(
+    interaction: discord.Interaction
+):
+
+    user_id = interaction.user.id
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    async with db_pool.acquire() as conn:
+
+        row = await conn.fetchrow(
+            """
+            SELECT last_claim
+            FROM daily_rewards
+            WHERE user_id = $1
+            """,
+            user_id
+        )
+
+        if row and row["last_claim"]:
+
+            last_claim = row["last_claim"]
+
+            if last_claim.tzinfo is None:
+
+                last_claim = last_claim.replace(
+                    tzinfo=timezone.utc
+                )
+
+            elapsed = (
+                now - last_claim
+            ).total_seconds()
+
+            if elapsed < 86400:
+
+                remaining = int(
+                    86400 - elapsed
+                )
+
+                hours = remaining // 3600
+                minutes = (
+                    remaining % 3600
+                ) // 60
+
+                embed = discord.Embed(
+                    description=(
+                        f"<:notification:1504083713548357732> "
+                        f"You already claimed your "
+                        f"<a:gift:1504084446683336826> "
+                        f"daily reward!\n\n"
+                        f"<a:question:1504084305067114629> "
+                        f"Try again in "
+                        f"`{hours}h {minutes}m`"
+                    ),
+                    color=0xffcc00
+                )
+
+                return await interaction.response.send_message(
+                    embed=embed,
+                    ephemeral=True
+                )
+
+        reward = 1
+
+        await update_user_coins(
+            user_id,
+            reward
+        )
+
+        await conn.execute(
+            """
+            INSERT INTO daily_rewards (
+                user_id,
+                last_claim
+            )
+            VALUES ($1, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+            last_claim = EXCLUDED.last_claim
+            """,
+            user_id,
+            now
+        )
+
+        balance = await get_user_coins(
+            user_id
+        )
+
+        embed = discord.Embed(
+            description=(
+                f"<a:gift:1504084446683336826> "
+                f"You claimed your daily reward!\n\n"
+                f"<:cash:1499803753396703252> "
+                f"Reward: `1.00` coins\n"
+                f"<a:moneyman:1504084503172350084> "
+                f"Balance: `{balance:.0f}` coins\n\n"
+                f"<a:tickmark:1504083668606648422> "
+                f"Come back tomorrow for more!"
+            ),
+            color=0x57F287
+        )
+
+        await interaction.response.send_message(
+            embed=embed
+        )
+
+
 
 bot.run(DISCORD_TOKEN)
