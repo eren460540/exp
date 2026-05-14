@@ -199,6 +199,12 @@ async def init_db():
             USING last_week_reset AT TIME ZONE 'UTC'
         """)
 
+        await conn.execute("""
+            ALTER TABLE status_rewards
+            ALTER COLUMN last_claim TYPE TIMESTAMPTZ
+            USING last_claim AT TIME ZONE 'UTC'
+        """)
+
 
 # =========================================================
 # CLIENTS
@@ -425,6 +431,16 @@ async def add_status_reward(user_id: int):
 
         now = datetime.now(timezone.utc)
 
+        def ensure_utc(dt):
+
+            if dt is None:
+                return now
+
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+
+            return dt.astimezone(timezone.utc)
+
         if not row:
 
             await conn.execute(
@@ -457,6 +473,82 @@ async def add_status_reward(user_id: int):
                 user_id,
                 STATUS_REWARD
             )
+
+            return
+
+        hour_coins = row["hour_coins"]
+        day_coins = row["day_coins"]
+        week_coins = row["week_coins"]
+        total_coins = row["total_coins"]
+
+        last_hour_reset = ensure_utc(
+            row["last_hour_reset"]
+        )
+
+        last_day_reset = ensure_utc(
+            row["last_day_reset"]
+        )
+
+        last_week_reset = ensure_utc(
+            row["last_week_reset"]
+        )
+
+        last_claim = ensure_utc(
+            row["last_claim"]
+        )
+
+        if (now - last_claim).total_seconds() < STATUS_INTERVAL:
+            return
+
+        if (now - last_hour_reset) >= timedelta(hours=1):
+
+            hour_coins = 0
+            last_hour_reset = now
+
+        if (now - last_day_reset) >= timedelta(days=1):
+
+            day_coins = 0
+            last_day_reset = now
+
+        if (now - last_week_reset) >= timedelta(days=7):
+
+            week_coins = 0
+            last_week_reset = now
+
+        hour_coins += STATUS_REWARD
+        day_coins += STATUS_REWARD
+        week_coins += STATUS_REWARD
+        total_coins += STATUS_REWARD
+
+        await conn.execute(
+            """
+            UPDATE status_rewards
+            SET
+                hour_coins = $1,
+                day_coins = $2,
+                week_coins = $3,
+                total_coins = $4,
+                last_hour_reset = $5,
+                last_day_reset = $6,
+                last_week_reset = $7,
+                last_claim = $8
+            WHERE user_id = $9
+            """,
+            hour_coins,
+            day_coins,
+            week_coins,
+            total_coins,
+            last_hour_reset,
+            last_day_reset,
+            last_week_reset,
+            now,
+            user_id
+        )
+
+    await update_user_coins(
+        user_id,
+        STATUS_REWARD
+    )
 
             return
 
