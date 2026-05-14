@@ -212,6 +212,29 @@ Rules:
 
 CASH = "<:cash:1499803753396703252>"
 
+EMBED_COLOR = 0x7B14BB
+
+EMBED_IMAGE = (
+    "https://cdn.discordapp.com/attachments/"
+    "1432016228049752135/"
+    "1502927683560931408/"
+    "file_00000000d3807246aa64c785bc8dd663.png"
+)
+
+
+def themed_embed(**kwargs):
+
+    embed = discord.Embed(
+        color=EMBED_COLOR,
+        **kwargs
+    )
+
+    embed.set_image(
+        url=EMBED_IMAGE
+    )
+
+    return embed
+
 # =========================================================
 # USER LOCKS
 # =========================================================
@@ -692,8 +715,8 @@ class ScriptBot(commands.Bot):
                 except:
                     pass
 
-
-bot = ScriptBot()
+    
+    bot = ScriptBot()
 
 # =========================================================
 # GLOBAL ERROR HANDLER
@@ -801,7 +824,7 @@ async def purchase(ctx):
 
         "## <:notification:1504083713548357732> Information\n\n"
 
-        "> <a:discordv2:1504084489683341353> Privacy Guaranteed: Once you purchase coins, you will be granted access to a private channel to run your commands.\n"
+        "> <a:discordv2:1504084489683341353> Privacy Guaranteed: The script will be sent to your DMs even though you use the message on a public channel.\n"
         "> <a:question:1504084305067114629> This ensures your custom code and scripts remain confidential.\n\n"
 
         "## <a:waves:1504084476198916206> Ready to buy?\n"
@@ -889,7 +912,7 @@ Created: {guild.created_at}
 # =========================================================
 
 
-@bot.tree.command(name="create_channel")
+@bot.tree.command(name="create_channel", description="Create a private scripting channel for a user")
 async def create_channel(
     interaction: discord.Interaction,
     user: discord.Member
@@ -964,7 +987,7 @@ async def create_channel(
     )
 
 
-@bot.tree.command(name="delete_channel")
+@bot.tree.command(name="delete_channel", description="Delete a user private scripting channel")
 async def delete_channel(
     interaction: discord.Interaction,
     user: discord.Member
@@ -1009,7 +1032,7 @@ async def delete_channel(
 # =========================================================
 
 
-@bot.tree.command(name="coin_add")
+@bot.tree.command(name="coin_add", description="Add coins to a user balance")
 async def coin_add(
     interaction: discord.Interaction,
     user: discord.Member,
@@ -1028,13 +1051,20 @@ async def coin_add(
         amount
     )
 
+    embed = themed_embed(
+        title="<a:moneyman:1504084503172350084> Coins Added",
+        description=(
+            f"> User: {user.mention}\n"
+            f"> New balance: {new_bal} {CASH}"
+        )
+    )
+
     await interaction.response.send_message(
-        f"## <a:moneyman:1504084503172350084> Coins Added\n"
-        f"> New balance: {new_bal} {CASH}"
+        embed=embed
     )
 
 
-@bot.tree.command(name="coin_remove")
+@bot.tree.command(name="coin_remove", description="Remove coins from a user balance")
 async def coin_remove(
     interaction: discord.Interaction,
     user: discord.Member,
@@ -1053,9 +1083,16 @@ async def coin_remove(
         -amount
     )
 
+    embed = themed_embed(
+        title="<a:money:1504084340248936572> Coins Removed",
+        description=(
+            f"> User: {user.mention}\n"
+            f"> New balance: {new_bal} {CASH}"
+        )
+    )
+
     await interaction.response.send_message(
-        f"## <a:money:1504084340248936572> Coins Removed\n"
-        f"> New balance: {new_bal} {CASH}"
+        embed=embed
     )
 
 # =========================================================
@@ -1063,7 +1100,7 @@ async def coin_remove(
 # =========================================================
 
 
-@bot.tree.command(name="balance")
+@bot.tree.command(name="balance", description="Check your coin balance")
 @app_commands.checks.cooldown(1, 3)
 async def balance(
     interaction: discord.Interaction
@@ -1073,13 +1110,17 @@ async def balance(
         interaction.user.id
     )
 
+    embed = themed_embed(
+        title="<a:gift:1504084446683336826> Balance",
+        description=f"> {coins} {CASH}"
+    )
+
     await interaction.response.send_message(
-        f"## <a:gift:1504084446683336826> Balance\n"
-        f"> {coins} {CASH}"
+        embed=embed
     )
 
 
-@bot.tree.command(name="status")
+@bot.tree.command(name="status", description="View your status reward statistics")
 @app_commands.checks.cooldown(1, 3)
 async def status(interaction: discord.Interaction):
 
@@ -1106,7 +1147,7 @@ async def status(interaction: discord.Interaction):
 # =========================================================
 
 
-@bot.tree.command(name="create_script")
+@bot.tree.command(name="create_script", description="Generate a Roblox Luau script with AI")
 @app_commands.checks.cooldown(1, 15)
 async def create_script(
     interaction: discord.Interaction,
@@ -1182,14 +1223,29 @@ async def create_script(
             filename="script.lua"
         )
 
-        await interaction.followup.send(
-            (
-                f"## <a:computer:1504084284435202098> Script Generated\n"
+        dm_embed = themed_embed(
+            title="<a:computer:1504084284435202098> Script Generated",
+            description=(
                 f"> ⏱️ {elapsed}s\n"
                 f"> 🤖 Model #{model_number}\n"
                 f"> 🧠 {tokens_used} tokens"
-            ),
+            )
+        )
+
+        await interaction.user.send(
+            embed=dm_embed,
             file=file
+        )
+
+        public_embed = themed_embed(
+            title="<a:tickmark:1504083668606648422> Script Sent",
+            description=(
+                "> Your generated script has been sent to your DMs."
+            )
+        )
+
+        await interaction.followup.send(
+            embed=public_embed
         )
 
 # =========================================================
@@ -1197,7 +1253,7 @@ async def create_script(
 # =========================================================
 
 
-@bot.tree.command(name="edit_script")
+@bot.tree.command(name="edit_script", description="Edit or improve an existing Roblox Luau script")
 @app_commands.checks.cooldown(1, 10)
 async def edit_script(
     interaction: discord.Interaction,
@@ -1320,14 +1376,29 @@ FULL ORIGINAL FILE:
             filename="edited.lua"
         )
 
-        await interaction.followup.send(
-            (
-                f"## <a:book:1504084400433008720> Script Edited\n"
+        dm_embed = themed_embed(
+            title="<a:book:1504084400433008720> Script Edited",
+            description=(
                 f"> ⏱️ {elapsed}s\n"
                 f"> 🤖 Model #{model_number}\n"
                 f"> 🧠 {tokens_used} tokens"
-            ),
+            )
+        )
+
+        await interaction.user.send(
+            embed=dm_embed,
             file=out_file
+        )
+
+        public_embed = themed_embed(
+            title="<a:tickmark:1504083668606648422> Script Sent",
+            description=(
+                "> Your edited script has been sent to your DMs."
+            )
+        )
+
+        await interaction.followup.send(
+            embed=public_embed
         )
 
 # =========================================================
