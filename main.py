@@ -393,9 +393,7 @@ async def update_user_coins(
 
 
 async def add_status_reward(user_id: int):
-
     async with db_pool.acquire() as conn:
-
         row = await conn.fetchrow(
             """
             SELECT *
@@ -406,9 +404,9 @@ async def add_status_reward(user_id: int):
         )
 
         now = datetime.now(timezone.utc)
+        now_naive = now.replace(tzinfo=None)  # for TIMESTAMP columns
 
         if not row:
-
             await conn.execute(
                 """
                 INSERT INTO status_rewards (
@@ -429,83 +427,80 @@ async def add_status_reward(user_id: int):
                 STATUS_REWARD,
                 STATUS_REWARD,
                 STATUS_REWARD,
-                now,
-                now,
-                now,
-                now
+                now_naive,
+                now_naive,
+                now_naive,
+                now  # TIMESTAMPTZ
             )
+            return
 
-        else:
+        # Existing user
+        hour_coins = row["hour_coins"]
+        day_coins = row["day_coins"]
+        week_coins = row["week_coins"]
+        total_coins = row["total_coins"]
 
-            hour_coins = row["hour_coins"]
-            day_coins = row["day_coins"]
-            week_coins = row["week_coins"]
-            total_coins = row["total_coins"]
+        last_hour_reset = row["last_hour_reset"]
+        last_day_reset = row["last_day_reset"]
+        last_week_reset = row["last_week_reset"]
+        last_claim = row["last_claim"]
 
-            last_hour_reset = row["last_hour_reset"]
-            last_day_reset = row["last_day_reset"]
-            last_week_reset = row["last_week_reset"]
-            last_claim = row["last_claim"]
+        # Make comparisons timezone-aware
+        if last_hour_reset and last_hour_reset.tzinfo is None:
+            last_hour_reset = last_hour_reset.replace(tzinfo=timezone.utc)
+        if last_day_reset and last_day_reset.tzinfo is None:
+            last_day_reset = last_day_reset.replace(tzinfo=timezone.utc)
+        if last_week_reset and last_week_reset.tzinfo is None:
+            last_week_reset = last_week_reset.replace(tzinfo=timezone.utc)
+        if last_claim and last_claim.tzinfo is None:
+            last_claim = last_claim.replace(tzinfo=timezone.utc)
 
-            # === FIX: Make all timestamps timezone-aware ===
-            if last_hour_reset.tzinfo is None:
-                last_hour_reset = last_hour_reset.replace(tzinfo=timezone.utc)
-            if last_day_reset.tzinfo is None:
-                last_day_reset = last_day_reset.replace(tzinfo=timezone.utc)
-            if last_week_reset.tzinfo is None:
-                last_week_reset = last_week_reset.replace(tzinfo=timezone.utc)
-            if last_claim.tzinfo is None:
-                last_claim = last_claim.replace(tzinfo=timezone.utc)
+        if now - last_claim < timedelta(seconds=STATUS_INTERVAL):
+            return
 
-            if now - last_claim < timedelta(seconds=STATUS_INTERVAL):
-                return
+        if now - last_hour_reset >= timedelta(hours=1):
+            hour_coins = 0
+            last_hour_reset = now
 
-            if now - last_hour_reset >= timedelta(hours=1):
-                hour_coins = 0
-                last_hour_reset = now
+        if now - last_day_reset >= timedelta(days=1):
+            day_coins = 0
+            last_day_reset = now
 
-            if now - last_day_reset >= timedelta(days=1):
-                day_coins = 0
-                last_day_reset = now
+        if now - last_week_reset >= timedelta(days=7):
+            week_coins = 0
+            last_week_reset = now
 
-            if now - last_week_reset >= timedelta(days=7):
-                week_coins = 0
-                last_week_reset = now
+        hour_coins += STATUS_REWARD
+        day_coins += STATUS_REWARD
+        week_coins += STATUS_REWARD
+        total_coins += STATUS_REWARD
 
-            hour_coins += STATUS_REWARD
-            day_coins += STATUS_REWARD
-            week_coins += STATUS_REWARD
-            total_coins += STATUS_REWARD
+        await conn.execute(
+            """
+            UPDATE status_rewards
+            SET
+                hour_coins = $1,
+                day_coins = $2,
+                week_coins = $3,
+                total_coins = $4,
+                last_hour_reset = $5,
+                last_day_reset = $6,
+                last_week_reset = $7,
+                last_claim = $8
+            WHERE user_id = $9
+            """,
+            hour_coins,
+            day_coins,
+            week_coins,
+            total_coins,
+            last_hour_reset.replace(tzinfo=None) if last_hour_reset else now_naive,
+            last_day_reset.replace(tzinfo=None) if last_day_reset else now_naive,
+            last_week_reset.replace(tzinfo=None) if last_week_reset else now_naive,
+            now,
+            user_id
+        )
 
-            await conn.execute(
-                """
-                UPDATE status_rewards
-                SET
-                    hour_coins = $1,
-                    day_coins = $2,
-                    week_coins = $3,
-                    total_coins = $4,
-                    last_hour_reset = $5,
-                    last_day_reset = $6,
-                    last_week_reset = $7,
-                    last_claim = $8
-                WHERE user_id = $9
-                """,
-                hour_coins,
-                day_coins,
-                week_coins,
-                total_coins,
-                last_hour_reset,
-                last_day_reset,
-                last_week_reset,
-                now,
-                user_id
-            )
-
-    await update_user_coins(
-        user_id,
-        STATUS_REWARD
-    )
+    await update_user_coins(user_id, STATUS_REWARD)
 
 
 async def get_status_data(user_id: int):
