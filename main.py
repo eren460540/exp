@@ -715,8 +715,7 @@ class ScriptBot(commands.Bot):
                 except:
                     pass
 
-    
-    bot = ScriptBot()
+bot = ScriptBot()
 
 # =========================================================
 # GLOBAL ERROR HANDLER
