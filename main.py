@@ -169,9 +169,9 @@ async def init_db():
                 day_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
                 week_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
                 total_coins DOUBLE PRECISION NOT NULL DEFAULT 0,
-                last_hour_reset TIMESTAMP NOT NULL DEFAULT NOW(),
-                last_day_reset TIMESTAMP NOT NULL DEFAULT NOW(),
-                last_week_reset TIMESTAMP NOT NULL DEFAULT NOW(),
+                last_hour_reset TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_day_reset TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_week_reset TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 last_claim TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
@@ -179,6 +179,24 @@ async def init_db():
         await conn.execute("""
             ALTER TABLE status_rewards
             ADD COLUMN IF NOT EXISTS last_claim TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        """)
+
+        await conn.execute("""
+            ALTER TABLE status_rewards
+            ALTER COLUMN last_hour_reset TYPE TIMESTAMPTZ
+            USING last_hour_reset AT TIME ZONE 'UTC'
+        """)
+
+        await conn.execute("""
+            ALTER TABLE status_rewards
+            ALTER COLUMN last_day_reset TYPE TIMESTAMPTZ
+            USING last_day_reset AT TIME ZONE 'UTC'
+        """)
+
+        await conn.execute("""
+            ALTER TABLE status_rewards
+            ALTER COLUMN last_week_reset TYPE TIMESTAMPTZ
+            USING last_week_reset AT TIME ZONE 'UTC'
         """)
 
 
@@ -393,7 +411,9 @@ async def update_user_coins(
 
 
 async def add_status_reward(user_id: int):
+
     async with db_pool.acquire() as conn:
+
         row = await conn.fetchrow(
             """
             SELECT *
@@ -404,9 +424,9 @@ async def add_status_reward(user_id: int):
         )
 
         now = datetime.now(timezone.utc)
-        now_naive = now.replace(tzinfo=None)  # for TIMESTAMP columns
 
         if not row:
+
             await conn.execute(
                 """
                 INSERT INTO status_rewards (
@@ -427,14 +447,19 @@ async def add_status_reward(user_id: int):
                 STATUS_REWARD,
                 STATUS_REWARD,
                 STATUS_REWARD,
-                now_naive,
-                now_naive,
-                now_naive,
-                now  # TIMESTAMPTZ
+                now,
+                now,
+                now,
+                now
             )
+
+            await update_user_coins(
+                user_id,
+                STATUS_REWARD
+            )
+
             return
 
-        # Existing user
         hour_coins = row["hour_coins"]
         day_coins = row["day_coins"]
         week_coins = row["week_coins"]
@@ -445,28 +470,47 @@ async def add_status_reward(user_id: int):
         last_week_reset = row["last_week_reset"]
         last_claim = row["last_claim"]
 
-        # Make comparisons timezone-aware
-        if last_hour_reset and last_hour_reset.tzinfo is None:
-            last_hour_reset = last_hour_reset.replace(tzinfo=timezone.utc)
-        if last_day_reset and last_day_reset.tzinfo is None:
-            last_day_reset = last_day_reset.replace(tzinfo=timezone.utc)
-        if last_week_reset and last_week_reset.tzinfo is None:
-            last_week_reset = last_week_reset.replace(tzinfo=timezone.utc)
-        if last_claim and last_claim.tzinfo is None:
-            last_claim = last_claim.replace(tzinfo=timezone.utc)
+        if last_hour_reset.tzinfo is None:
 
-        if now - last_claim < timedelta(seconds=STATUS_INTERVAL):
+            last_hour_reset = last_hour_reset.replace(
+                tzinfo=timezone.utc
+            )
+
+        if last_day_reset.tzinfo is None:
+
+            last_day_reset = last_day_reset.replace(
+                tzinfo=timezone.utc
+            )
+
+        if last_week_reset.tzinfo is None:
+
+            last_week_reset = last_week_reset.replace(
+                tzinfo=timezone.utc
+            )
+
+        if last_claim.tzinfo is None:
+
+            last_claim = last_claim.replace(
+                tzinfo=timezone.utc
+            )
+
+        if now - last_claim < timedelta(
+            seconds=STATUS_INTERVAL
+        ):
             return
 
         if now - last_hour_reset >= timedelta(hours=1):
+
             hour_coins = 0
             last_hour_reset = now
 
         if now - last_day_reset >= timedelta(days=1):
+
             day_coins = 0
             last_day_reset = now
 
         if now - last_week_reset >= timedelta(days=7):
+
             week_coins = 0
             last_week_reset = now
 
@@ -493,14 +537,17 @@ async def add_status_reward(user_id: int):
             day_coins,
             week_coins,
             total_coins,
-            last_hour_reset.replace(tzinfo=None) if last_hour_reset else now_naive,
-            last_day_reset.replace(tzinfo=None) if last_day_reset else now_naive,
-            last_week_reset.replace(tzinfo=None) if last_week_reset else now_naive,
+            last_hour_reset,
+            last_day_reset,
+            last_week_reset,
             now,
             user_id
         )
 
-    await update_user_coins(user_id, STATUS_REWARD)
+    await update_user_coins(
+        user_id,
+        STATUS_REWARD
+    )
 
 
 async def get_status_data(user_id: int):
