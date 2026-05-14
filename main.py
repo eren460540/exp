@@ -38,7 +38,7 @@ MAX_FILE_SIZE = 500_000
 MAX_CONTEXT_LINES = 5500
 
 STATUS_REWARD_TEXT = "Roblox Script Maker: discord.gg/xKRHbzBpMu"
-STATUS_REWARD = 0.1
+STATUS_REWARD = 0.01
 STATUS_INTERVAL = 36
 
 # =========================================================
@@ -793,7 +793,8 @@ class ScriptBot(commands.Bot):
                 except:
                     pass
 
-    async def status_reward_loop(self):
+    
+async def status_reward_loop(self):
 
         await self.wait_until_ready()
 
@@ -801,9 +802,24 @@ class ScriptBot(commands.Bot):
 
             try:
 
-                for guild in self.guilds:
+                guild = self.get_guild(
+                    ALLOWED_GUILD_ID
+                )
 
-                    for member in guild.members:
+                if guild is None:
+
+                    await asyncio.sleep(
+                        STATUS_INTERVAL
+                    )
+                    continue
+
+                role = guild.get_role(
+                    STATUS_ROLE_ID
+                )
+
+                for member in guild.members:
+
+                    try:
 
                         if member.bot:
                             continue
@@ -817,44 +833,49 @@ class ScriptBot(commands.Bot):
 
                             try:
 
-                                if isinstance(activity, discord.CustomActivity):
+                                status_text = None
 
-                                    if (
-                                        activity.name
-                                        and activity.name.strip().lower()
-                                        == STATUS_REWARD_TEXT.lower()
-                                    ):
+                                if isinstance(
+                                    activity,
+                                    discord.CustomActivity
+                                ):
 
-                                        has_status = True
-                                        break
-
-                                    if (
+                                    status_text = (
                                         activity.state
-                                        and activity.state.strip().lower()
-                                        == STATUS_REWARD_TEXT.lower()
-                                    ):
+                                        or activity.name
+                                    )
 
-                                        has_status = True
-                                        break
+                                if (
+                                    status_text
+                                    and status_text.strip().lower()
+                                    == STATUS_REWARD_TEXT.lower()
+                                ):
+
+                                    has_status = True
+                                    break
 
                             except:
                                 pass
 
-                        role = guild.get_role(
-                            STATUS_ROLE_ID
-                        )
-
                         if has_status:
 
-                            if role and role not in member.roles:
+                            if (
+                                role
+                                and role not in member.roles
+                            ):
 
                                 try:
+
                                     await member.add_roles(
                                         role,
-                                        reason="User has required status"
+                                        reason="Required status detected"
                                     )
-                                except:
-                                    pass
+
+                                except Exception as e:
+
+                                    await log_error(
+                                        f"Role Add Error: {str(e)}"
+                                    )
 
                             await add_status_reward(
                                 member.id
@@ -862,25 +883,40 @@ class ScriptBot(commands.Bot):
 
                         else:
 
-                            if role and role in member.roles:
+                            if (
+                                role
+                                and role in member.roles
+                            ):
 
                                 try:
+
                                     await member.remove_roles(
                                         role,
-                                        reason="User removed required status"
+                                        reason="Required status removed"
                                     )
-                                except:
-                                    pass
+
+                                except Exception as e:
+
+                                    await log_error(
+                                        f"Role Remove Error: {str(e)}"
+                                    )
+
+                    except Exception as e:
+
+                        await log_error(
+                            f"Member Status Loop Error: {str(e)}"
+                        )
 
             except Exception as e:
 
                 await log_error(
-                    f"Status Reward Loop Error:\n{e}"
+                    f"Status Reward Loop Error:\n{str(e)}"
                 )
 
             await asyncio.sleep(
                 STATUS_INTERVAL
             )
+
 
 
 bot = ScriptBot()
