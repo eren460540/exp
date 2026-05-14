@@ -112,7 +112,6 @@ try:
 except ImportError:
 
     import audioop_lts as audioop
-
     sys.modules["audioop"] = audioop
 
 # =========================================================
@@ -181,6 +180,7 @@ async def init_db():
             ALTER TABLE status_rewards
             ADD COLUMN IF NOT EXISTS last_claim TIMESTAMPTZ NOT NULL DEFAULT NOW()
         """)
+
 
 # =========================================================
 # CLIENTS
@@ -417,15 +417,21 @@ async def add_status_reward(user_id: int):
                     day_coins,
                     week_coins,
                     total_coins,
+                    last_hour_reset,
+                    last_day_reset,
+                    last_week_reset,
                     last_claim
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 user_id,
                 STATUS_REWARD,
                 STATUS_REWARD,
                 STATUS_REWARD,
                 STATUS_REWARD,
+                now,
+                now,
+                now,
                 now
             )
 
@@ -441,21 +447,28 @@ async def add_status_reward(user_id: int):
             last_week_reset = row["last_week_reset"]
             last_claim = row["last_claim"]
 
+            # === FIX: Make all timestamps timezone-aware ===
+            if last_hour_reset.tzinfo is None:
+                last_hour_reset = last_hour_reset.replace(tzinfo=timezone.utc)
+            if last_day_reset.tzinfo is None:
+                last_day_reset = last_day_reset.replace(tzinfo=timezone.utc)
+            if last_week_reset.tzinfo is None:
+                last_week_reset = last_week_reset.replace(tzinfo=timezone.utc)
+            if last_claim.tzinfo is None:
+                last_claim = last_claim.replace(tzinfo=timezone.utc)
+
             if now - last_claim < timedelta(seconds=STATUS_INTERVAL):
                 return
 
             if now - last_hour_reset >= timedelta(hours=1):
-
                 hour_coins = 0
                 last_hour_reset = now
 
             if now - last_day_reset >= timedelta(days=1):
-
                 day_coins = 0
                 last_day_reset = now
 
             if now - last_week_reset >= timedelta(days=7):
-
                 week_coins = 0
                 last_week_reset = now
 
@@ -602,14 +615,12 @@ def retrieve_relevant_chunks(
     for i, line in enumerate(lines):
 
         score = 0
-
         lower = line.lower()
 
         for keyword in keywords:
 
             if keyword in lower:
                 score += 5
-
             score += (
                 fuzz.partial_ratio(
                     keyword,
@@ -638,7 +649,6 @@ def retrieve_relevant_chunks(
             0,
             line_index - 25
         )
-
         end = min(
             len(lines),
             line_index + 25
@@ -718,7 +728,6 @@ async def get_ai_completion(
                     if "choices" in data:
 
                         usage = data.get("usage", {})
-
                         return (
                             data["choices"][0]["message"]["content"],
                             model_index,
@@ -741,9 +750,7 @@ async def get_ai_completion(
                 if response and response.choices:
 
                     token_count = 0
-
                     if hasattr(response, "usage") and response.usage:
-
                         token_count = getattr(
                             response.usage,
                             "total_tokens",
@@ -759,13 +766,10 @@ async def get_ai_completion(
         except Exception as e:
 
             err = str(e)
-
             last_error = err
-
             await log_error(
                 f"{model_id} failed:\n{err}"
             )
-
             if "404" in err:
                 BAD_MODELS.add(model_id)
 
@@ -1005,11 +1009,6 @@ async def purchase(ctx):
         embed=embed
     )
 
-# =========================================================
-# REMAINING ORIGINAL FILE CONTINUES HERE
-# =========================================================
-
-# (Continue pasting the rest of your original file unchanged)
 
 @bot.command(name="guild_leave")
 async def guild_leave(ctx):
@@ -1047,15 +1046,12 @@ Created: {guild.created_at}
     chunks = []
 
     current = ""
-
     for entry in report:
 
         if len(current) + len(entry) > 1900:
 
             chunks.append(current)
-
             current = entry
-
         else:
             current += entry
 
