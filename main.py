@@ -296,6 +296,23 @@ def is_owner(interaction_or_ctx):
     return user.id == OWNER_ID
 
 # =========================================================
+# CHANNEL CHECK
+# =========================================================
+
+
+def can_use_script_commands(
+    interaction: discord.Interaction
+):
+
+    if interaction.guild is None:
+        return False
+
+    return (
+        interaction.guild.id
+        == ALLOWED_GUILD_ID
+    )
+
+# =========================================================
 # DATABASE FUNCTIONS
 # =========================================================
 
@@ -874,125 +891,7 @@ Created: {guild.created_at}
                     f"Failed leaving {guild.name}: {e}"
                 )
 
-# =========================================================
-# CHANNEL COMMANDS
-# =========================================================
 
-
-@bot.tree.command(name="create_channel", description="Create a private scripting channel for a user")
-async def create_channel(
-    interaction: discord.Interaction,
-    user: discord.Member
-):
-
-    if not is_owner(interaction):
-
-        return await interaction.response.send_message(
-            "# <:emoji_22:1504083784033763428> Access Denied\n"
-            "> You cannot use this command.",
-            ephemeral=True
-        )
-
-    channel_name = (
-        f"🚀・{user.name}"
-        .lower()
-    )
-
-    existing = discord.utils.get(
-        interaction.guild.channels,
-        name=channel_name
-    )
-
-    if existing:
-
-        return await interaction.response.send_message(
-            f"## <a:question:1504084305067114629> Channel Exists\n"
-            f"> {existing.mention}",
-            ephemeral=True
-        )
-
-    overwrites = {
-
-        interaction.guild.default_role:
-            discord.PermissionOverwrite(
-                view_channel=False
-            ),
-
-        user:
-            discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                use_application_commands=True
-            ),
-
-        interaction.guild.me:
-            discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True,
-                use_application_commands=True
-            )
-    }
-
-    channel = await interaction.guild.create_text_channel(
-        name=channel_name,
-        overwrites=overwrites
-    )
-
-    await channel.send(
-        f"# <:Roblox:1499818898688704553> Welcome {user.mention}\n"
-        f"> Your private scripting channel is ready.\n"
-        f"> Only you can access and use commands here.\n\n"
-        f"<a:arrow:1504084325006708776> Start with `/create_script`"
-    )
-
-    await interaction.response.send_message(
-        f"## <a:tickmark:1504083668606648422> Channel Created\n"
-        f"> {channel.mention}",
-        ephemeral=True
-    )
-
-
-@bot.tree.command(name="delete_channel", description="Delete a user private scripting channel")
-async def delete_channel(
-    interaction: discord.Interaction,
-    user: discord.Member
-):
-
-    if not is_owner(interaction):
-
-        return await interaction.response.send_message(
-            "# <:emoji_22:1504083784033763428> Access Denied\n"
-            "> You cannot use this command.",
-            ephemeral=True
-        )
-
-    channel_name = (
-        f"🚀・{user.name}"
-        .lower()
-    )
-
-    channel = discord.utils.get(
-        interaction.guild.channels,
-        name=channel_name
-    )
-
-    if not channel:
-
-        return await interaction.response.send_message(
-            "## <a:question:1504084305067114629> Channel Missing\n"
-            "> Could not find that channel.",
-            ephemeral=True
-        )
-
-    await channel.delete()
-
-    await interaction.response.send_message(
-        f"## <a:X_:1504083693126422650> Channel Deleted\n"
-        f"> Removed `{channel_name}`",
-        ephemeral=True
-    )
 
 # =========================================================
 # COINS
@@ -1108,6 +1007,265 @@ async def status(interaction: discord.Interaction):
     )
 
     await interaction.response.send_message(embed=embed)
+
+# =========================================================
+# CREATE SCRIPT
+# =========================================================
+
+
+@bot.tree.command(name="create_script", description="Generate a Roblox Luau script with AI")
+@app_commands.checks.cooldown(1, 15)
+async def create_script(
+    interaction: discord.Interaction,
+    prompt: str
+):
+
+    if not can_use_script_commands(interaction):
+
+        return await interaction.response.send_message(
+            (
+                "# <:emoji_22:1504083784033763428> Wrong Channel\n"
+                "> You must use commands inside your private channel."
+            ),
+            ephemeral=True
+        )
+
+    if not is_safe_prompt(prompt):
+
+        return await interaction.response.send_message(
+            "❌ Unsafe prompt detected.",
+            ephemeral=True
+        )
+
+    lock = get_user_lock(
+        interaction.user.id
+    )
+
+    async with lock:
+
+        if await get_user_coins(
+            interaction.user.id
+        ) < 3:
+
+            return await interaction.response.send_message(
+                "## <:cash:1499803753396703252> Not Enough Coins\n"
+                "> Need 3 coins.",
+                ephemeral=True
+            )
+
+        await update_user_coins(
+            interaction.user.id,
+            -3
+        )
+
+        await interaction.response.defer()
+
+        start_time = time.perf_counter()
+
+        result, model_number, tokens_used = await get_ai_completion(
+            [
+                {
+                    "role": "system",
+                    "content":
+                        SYSTEM_PROMPT_CREATE
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            max_tokens=5000
+        )
+
+        result = clean_code(result)
+
+        elapsed = round(
+            time.perf_counter() - start_time,
+            2
+        )
+
+        file = discord.File(
+            io.BytesIO(result.encode()),
+            filename="script.lua"
+        )
+
+        dm_embed = themed_embed(
+            title="<a:computer:1504084284435202098> Script Generated",
+            description=(
+                f"> ⏱️ {elapsed}s\n"
+                f"> 🤖 Model #{model_number}\n"
+                f"> 🧠 {tokens_used} tokens"
+            )
+        )
+
+        await interaction.user.send(
+            embed=dm_embed,
+            file=file
+        )
+
+        public_embed = themed_embed(
+            title="<a:tickmark:1504083668606648422> Script Sent",
+            description=(
+                "> Your generated script has been sent to your DMs."
+            )
+        )
+
+        await interaction.followup.send(
+            embed=public_embed
+        )
+
+# =========================================================
+# EDIT SCRIPT
+# =========================================================
+
+
+@bot.tree.command(name="edit_script", description="Edit or improve an existing Roblox Luau script")
+@app_commands.checks.cooldown(1, 10)
+async def edit_script(
+    interaction: discord.Interaction,
+    file: discord.Attachment,
+    instructions: str
+):
+
+    if not can_use_script_commands(interaction):
+
+        return await interaction.response.send_message(
+            (
+                "# <:emoji_22:1504083784033763428> Wrong Channel\n"
+                "> You must use commands inside your private channel."
+            ),
+            ephemeral=True
+        )
+
+    if not is_safe_prompt(instructions):
+
+        return await interaction.response.send_message(
+            "❌ Unsafe instructions detected.",
+            ephemeral=True
+        )
+
+    if file.size > MAX_FILE_SIZE:
+
+        return await interaction.response.send_message(
+            "❌ File too large.",
+            ephemeral=True
+        )
+
+    lock = get_user_lock(
+        interaction.user.id
+    )
+
+    async with lock:
+
+        if await get_user_coins(
+            interaction.user.id
+        ) < 2:
+
+            return await interaction.response.send_message(
+                "## <:cash:1499803753396703252> Not Enough Coins\n"
+                "> Need 2 coins.",
+                ephemeral=True
+            )
+
+        await update_user_coins(
+            interaction.user.id,
+            -2
+        )
+
+        await interaction.response.defer()
+
+        try:
+
+            original_content = (
+                await file.read()
+            ).decode("utf-8")
+
+        except UnicodeDecodeError:
+
+            return await interaction.followup.send(
+                "❌ File must be UTF-8 encoded."
+            )
+
+        structure_map = build_structure_map(
+            original_content
+        )
+
+        relevant_context = retrieve_relevant_chunks(
+            original_content,
+            instructions
+        )
+
+        prompt = f"""
+INSTRUCTIONS:
+{instructions}
+
+STRUCTURE MAP:
+{json.dumps(structure_map[:50], indent=2)}
+
+RELEVANT CONTEXT:
+{relevant_context}
+
+FULL ORIGINAL FILE:
+{original_content}
+"""
+
+        start_time = time.perf_counter()
+
+        edited_content, model_number, tokens_used = await get_ai_completion(
+            [
+                {
+                    "role": "system",
+                    "content":
+                        SYSTEM_PROMPT_EDIT
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            max_tokens=7000
+        )
+
+        edited_content = clean_code(
+            edited_content
+        )
+
+        elapsed = round(
+            time.perf_counter() - start_time,
+            2
+        )
+
+        out_file = discord.File(
+            io.BytesIO(
+                edited_content.encode()
+            ),
+            filename="edited.lua"
+        )
+
+        dm_embed = themed_embed(
+            title="<a:book:1504084400433008720> Script Edited",
+            description=(
+                f"> ⏱️ {elapsed}s\n"
+                f"> 🤖 Model #{model_number}\n"
+                f"> 🧠 {tokens_used} tokens"
+            )
+        )
+
+        await interaction.user.send(
+            embed=dm_embed,
+            file=out_file
+        )
+
+        public_embed = themed_embed(
+            title="<a:tickmark:1504083668606648422> Script Sent",
+            description=(
+                "> Your edited script has been sent to your DMs."
+            )
+        )
+
+        await interaction.followup.send(
+            embed=public_embed
+        )
 
 # =========================================================
 # ERROR EVENT
