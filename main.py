@@ -1074,7 +1074,7 @@ async def create_script(
                     "content": prompt
                 }
             ],
-            max_tokens=150000
+            max_tokens=131000
         )
 
         result = clean_code(result)
@@ -1223,7 +1223,7 @@ FULL ORIGINAL FILE:
                     "content": prompt
                 }
             ],
-            max_tokens=150000
+            max_tokens=131000
         )
 
         edited_content = clean_code(
